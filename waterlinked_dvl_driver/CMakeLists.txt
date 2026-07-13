@@ -10,6 +10,7 @@ include(GNUInstallDirs)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(marine_acoustic_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
@@ -44,6 +45,7 @@ target_link_libraries(
         rclcpp_components::component_manager
         libwaterlinked::libwaterlinked
         ${geometry_msgs_TARGETS}
+        ${std_msgs_TARGETS}
         ${std_srvs_TARGETS}
         ${marine_acoustic_msgs_TARGETS}
         ${nav_msgs_TARGETS}
@@ -71,6 +73,7 @@ ament_export_dependencies(
     "rclcpp"
     "rclcpp_lifecycle"
     "geometry_msgs"
+    "std_msgs"
     "std_srvs"
     "marine_acoustic_msgs"
     "nav_msgs"

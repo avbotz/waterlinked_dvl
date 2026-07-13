@@ -23,6 +23,28 @@ waterlinked_dvl_driver:
     description: "The frame ID of the DVL."
     read_only: true
 
+  odom_frame_id:
+    type: string
+    default_value: "odom"
+    description: "The world frame the odometry pose (z from altitude) is reported in."
+    read_only: true
+
+  pool_height:
+    type: double
+    default_value: 0.0
+    description: "Depth of the pool floor below the surface (m). The odometry pose z is altitude - pool_height (ENU, negative underwater)."
+    read_only: true
+    validation:
+      gt_eq<>: [0.0]
+
+  z_variance:
+    type: double
+    default_value: 0.01
+    description: "Variance of the altitude-derived z position (m^2)."
+    read_only: true
+    validation:
+      gt<>: [0.0]
+
   speed_of_sound:
     type: int
     default_value: 1481

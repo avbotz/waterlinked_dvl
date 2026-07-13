@@ -99,8 +99,24 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
   // Pre-populate the sensor state messages with known, static values
   dvl_msg_.header.frame_id = params_.frame_id;
   dead_reckoning_msg_.header.frame_id = params_.frame_id;
-  odom_msg_.header.frame_id = params_.frame_id;
+
+  // The odometry pose (z from altitude) is in the world frame; the twist stays
+  // in the DVL frame.
+  odom_msg_.header.frame_id = params_.odom_frame_id;
   odom_msg_.child_frame_id = params_.frame_id;
+  odom_msg_.pose.pose.orientation.w = 1.0;
+
+  // x/y position and orientation are never measured (the DVL's dead-reckoned
+  // pose is deliberately unused); -1 marks them invalid for consumers.
+  odom_msg_.pose.covariance[0] = -1;
+  odom_msg_.pose.covariance[7] = -1;
+  odom_msg_.pose.covariance[21] = -1;
+  odom_msg_.pose.covariance[28] = -1;
+  odom_msg_.pose.covariance[35] = -1;
+
+  if (params_.pool_height <= 0.0) {
+    RCLCPP_WARN(get_logger(), "pool_height is not set; odometry z will read height above the floor instead of depth");
+  }
 
   dvl_msg_.velocity_mode = marine_acoustic_msgs::msg::Dvl::DVL_MODE_BOTTOM;
   dvl_msg_.dvl_type = marine_acoustic_msgs::msg::Dvl::DVL_TYPE_PISTON;  // 4-beam convex Janus array
@@ -132,6 +148,7 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
 
   dvl_pub_ = create_publisher<marine_acoustic_msgs::msg::Dvl>("~/velocity_report", rclcpp::SystemDefaultsQoS());
   odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("~/odom", rclcpp::SystemDefaultsQoS());
+  altitude_pub_ = create_publisher<std_msgs::msg::Float64>("~/altitude", rclcpp::SystemDefaultsQoS());
   dead_reckoning_pub_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "~/dead_reckoning_report", rclcpp::SystemDefaultsQoS());
 
@@ -179,6 +196,21 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
       }
     }
 
+    // The altitude is the height above the pool floor, which sits pool_height
+    // below the surface (world z = 0), so a valid altitude is an absolute
+    // measurement of z (ENU, negative underwater).
+    if (report.altitude >= 0) {
+      odom_msg_.pose.pose.position.z = report.altitude - params_.pool_height;
+      odom_msg_.pose.covariance[14] = params_.z_variance;
+
+      std_msgs::msg::Float64 altitude_msg;
+      altitude_msg.data = report.altitude;
+      altitude_pub_->publish(altitude_msg);
+    } else {
+      // No bottom lock: hold the last z but make it too uncertain to fuse.
+      odom_msg_.pose.covariance[14] = 1e6;
+    }
+
     odom_pub_->publish(odom_msg_);
   });
 
@@ -204,30 +236,6 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
     dead_reckoning_msg_.pose.covariance[35] = -1;
 
     dead_reckoning_pub_->publish(dead_reckoning_msg_);
-  });
-
-  client_->register_callback([this](const DeadReckoningReport & report) {
-    const auto t = std::chrono::time_point_cast<std::chrono::nanoseconds>(report.ts);
-    odom_msg_.header.stamp = rclcpp::Time(t.time_since_epoch().count());
-
-    odom_msg_.pose.pose.position.x = report.x;
-    odom_msg_.pose.pose.position.y = report.y;
-    odom_msg_.pose.pose.position.z = report.z;
-
-    tf2::Quaternion q;
-    q.setRPY(report.roll * M_PI / 180., report.pitch * M_PI / 180., report.yaw * M_PI / 180.);
-    odom_msg_.pose.pose.orientation = tf2::toMsg(q);
-
-    odom_msg_.pose.covariance[0] = report.std;
-    odom_msg_.pose.covariance[7] = report.std;
-    odom_msg_.pose.covariance[14] = report.std;
-
-    // same as above: orientation covariance isn't provided by the DVL so set to -1
-    odom_msg_.pose.covariance[21] = -1;
-    odom_msg_.pose.covariance[28] = -1;
-    odom_msg_.pose.covariance[35] = -1;
-
-    odom_pub_->publish(odom_msg_);
   });
 
   enable_acoustic_srv_ = create_service<std_srvs::srv::SetBool>(

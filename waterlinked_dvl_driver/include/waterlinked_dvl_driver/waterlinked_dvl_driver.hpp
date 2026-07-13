@@ -28,6 +28,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
+#include "std_msgs/msg/float64.hpp"
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
@@ -62,6 +63,7 @@ private:
   std::shared_ptr<rclcpp::Publisher<marine_acoustic_msgs::msg::Dvl>> dvl_pub_;
   std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>> dead_reckoning_pub_;
   std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odom_pub_;
+  std::shared_ptr<rclcpp::Publisher<std_msgs::msg::Float64>> altitude_pub_;
 
   std::shared_ptr<rclcpp::Service<std_srvs::srv::SetBool>> enable_acoustic_srv_;
   std::shared_ptr<rclcpp::Service<std_srvs::srv::SetBool>> enable_dark_mode_srv_;
