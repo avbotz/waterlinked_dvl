@@ -11,6 +11,12 @@ waterlinked_dvl_driver:
     description: "The DVL TCP port."
     read_only: true
 
+  ntp_address:
+    type: string
+    default_value: "auto"
+    description: "The IP address of the NTP server."
+    read_only: true
+
   timeout:
     type: int
     default_value: 5

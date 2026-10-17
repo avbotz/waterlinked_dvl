@@ -126,6 +126,9 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
     return CallbackReturn::ERROR;
   }
 
+  client_->set_ntp_config(params_.ntp_address);
+  client_->force_ntp_sync(std::chrono::seconds{5});
+
   // Pre-populate the sensor state messages with known, static values
   dvl_msg_.header.frame_id = params_.frame_id;
   dead_reckoning_msg_.header.frame_id = params_.frame_id;
@@ -323,6 +326,15 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
       std::future<CommandResponse> f = client_->trigger_ping();
       populate_service_response(response, f);
     });
+
+    force_ntp_sync_srv_ = create_service<std_srvs::srv::Trigger>(
+      "~/force_ntp_sync",
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
+        std::future<CommandResponse> f = client_->force_ntp_sync(std::chrono::seconds{5});
+        populate_service_response(response, f);
+      });
 
   RCLCPP_INFO(get_logger(), "WaterLinkedDvlDriver loaded successfully");
 

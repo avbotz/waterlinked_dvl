@@ -91,8 +91,18 @@ public:
   /// - 4: 15m - 75m
   auto set_range_mode(const std::string & mode) -> std::future<CommandResponse>;
 
+  // Set NTP address DVL will use to fetch time. Either a valid IP address or "auto".
+  auto set_ntp_config(const std::string & addr) -> std::future<CommandResponse>;
+
+  // Set time manually. Must be formatted as RFC3339 timestamp string. Only allowed when NTP is not synchronized.
+  auto set_time_manual(const std::string & time) -> std::future<CommandResponse>;
+
   /// Fetch the current configuration of the DVL.
   auto get_configuration() -> std::future<CommandResponse>;
+
+  auto get_ntp_config() -> std::future<CommandResponse>;
+
+  auto get_time_status() -> std::future<CommandResponse>;
 
   /// Set all DVL configuration parameters at once.
   auto set_configuration(const Configuration & configuration) -> std::future<CommandResponse>;
@@ -108,6 +118,9 @@ public:
 
   /// Reset the dead reckoning measurements.
   auto reset_dead_reckoning() -> std::future<CommandResponse>;
+
+  // Forces NTP sync. Takes timeout in seconds.
+  auto force_ntp_sync(std::chrono::seconds timeout) -> std::future<CommandResponse>;
 
   /// Register a callback to receive the velocity report.
   auto register_callback(std::function<void(const VelocityReport &)> && callback) -> void;

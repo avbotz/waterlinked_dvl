@@ -74,6 +74,7 @@ private:
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> calibrate_gyro_srv_;
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> reset_dead_reckoning_srv_;
   std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> trigger_ping_srv_;
+  std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> force_ntp_sync_srv_;
 };
 
 }  // namespace waterlinked::ros

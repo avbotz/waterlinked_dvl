@@ -274,9 +274,27 @@ auto WaterLinkedClient::set_range_mode(const std::string & mode) -> std::future<
   return send_command({{"command", "set_config"}, {"parameters", {{"range_mode", mode}}}});
 }
 
+auto WaterLinkedClient::set_ntp_config(const std::string & addr) -> std::future<CommandResponse>
+{
+  return send_command({{"command", "set_ntp_config"}, {"parameters", {{"ntp_address", addr}}}});
+}
+
+auto WaterLinkedClient::set_time_manual(const std::string & time) -> std::future<CommandResponse>
+{
+  return send_command({{"command", "set_time_manual"}, {"parameters", {{"now", time}}}});
+}
+
 auto WaterLinkedClient::get_configuration() -> std::future<CommandResponse>
 {
   return send_command({{"command", "get_config"}});
+}
+
+auto WaterLinkedClient::get_ntp_config() -> std::future<CommandResponse> {
+  return send_command({{"command", "get_time_ntp"}});
+}
+
+auto WaterLinkedClient::get_time_status() -> std::future<CommandResponse> {
+  return send_command({{"command", "get_time_status"}});
 }
 
 auto WaterLinkedClient::set_configuration(const Configuration & configuration) -> std::future<CommandResponse>
@@ -298,6 +316,10 @@ auto WaterLinkedClient::calibrate_gyro() -> std::future<CommandResponse>
 auto WaterLinkedClient::reset_dead_reckoning() -> std::future<CommandResponse>
 {
   return send_command({{"command", "reset_dead_reckoning"}});
+}
+
+auto WaterLinkedClient::force_ntp_sync(std::chrono::seconds timeout) -> std::future<CommandResponse> {
+  return send_command({{"command", "force_ntp_sync"}, {"parameters", timeout.count()}});
 }
 
 auto WaterLinkedClient::register_callback(std::function<void(const VelocityReport &)> && callback) -> void
