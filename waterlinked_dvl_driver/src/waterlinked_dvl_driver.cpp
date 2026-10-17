@@ -129,8 +129,8 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
   // Pre-populate the sensor state messages with known, static values
   dvl_msg_.header.frame_id = params_.frame_id;
   dead_reckoning_msg_.header.frame_id = params_.frame_id;
-  odom_msg_.header.frame_id = params_.frame_id;
-  odom_msg_.child_frame_id = params_.frame_id;
+  velocity_msg_.header.frame_id = params_.frame_id;
+  range_.header.frame_id = params_.frame_id;
 
   if (params_.range_mode == "wt") {
     dvl_msg_.velocity_mode = marine_acoustic_msgs::msg::Dvl::DVL_MODE_WATER;
@@ -167,7 +167,9 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
   dvl_pub_ = create_publisher<marine_acoustic_msgs::msg::Dvl>("~/velocity_report", rclcpp::SystemDefaultsQoS());
   dvl_water_pub_ =
     create_publisher<marine_acoustic_msgs::msg::Dvl>("~/velocity_water_report", rclcpp::SystemDefaultsQoS());
-  odom_pub_ = create_publisher<nav_msgs::msg::Odometry>("~/odom", rclcpp::SystemDefaultsQoS());
+  velocity_pub_ = create_publisher<geometry_msgs::msg::TwistWithCovarianceStamped>(
+    "~/velocity", rclcpp::SystemDefaultsQoS());
+  altitude_pub_ = create_publisher<sensor_msgs::msg::Range>("~/altitude", rclcpp::SystemDefaultsQoS());
   dead_reckoning_pub_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "~/dead_reckoning_report", rclcpp::SystemDefaultsQoS());
 
@@ -215,20 +217,33 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
 
   // much of the following code could be moved into the above callback, but we separate it to improve readability
   client_->register_callback([this](const VelocityReport & report) -> void {
+    if (!report.velocity_valid) {
+      return;
+    }
     const auto t = std::chrono::time_point_cast<std::chrono::nanoseconds>(report.time_of_validity);
-    odom_msg_.header.stamp = rclcpp::Time(t.time_since_epoch().count());
+    velocity_msg_.header.stamp = rclcpp::Time(t.time_since_epoch().count());
 
-    odom_msg_.twist.twist.linear.x = report.vx;
-    odom_msg_.twist.twist.linear.y = report.vy;
-    odom_msg_.twist.twist.linear.z = report.vz;
+    if (report.type != "velocity_water" && std::isfinite(report.altitude) && report.altitude > 0.0) {
+      range_.header.stamp = velocity_msg_.header.stamp;
+      range_.radiation_type = sensor_msgs::msg::Range::ULTRASOUND;
+      range_.field_of_view = static_cast<float>(2.0 * 22.5 * M_PI / 180.0);
+      range_.min_range = 0.05F;
+      range_.max_range = 50.0F;
+      range_.range = static_cast<float>(report.altitude);
+      altitude_pub_->publish(range_);  // NOLINT(portability-template-virtual-member-function)
+    }
+
+    velocity_msg_.twist.twist.linear.x = report.vx;
+    velocity_msg_.twist.twist.linear.y = report.vy;
+    velocity_msg_.twist.twist.linear.z = report.vz;
 
     for (std::size_t i = 0; i < 3; ++i) {
       for (std::size_t j = 0; j < 3; ++j) {
-        odom_msg_.twist.covariance[(i * 6) + j] = report.covariance(i, j);
+        velocity_msg_.twist.covariance[(i * 6) + j] = report.covariance(i, j);
       }
     }
 
-    odom_pub_->publish(odom_msg_);  // NOLINT(portability-template-virtual-member-function)
+    velocity_pub_->publish(velocity_msg_);  // NOLINT(portability-template-virtual-member-function)
   });
 
   client_->register_callback([this](const DeadReckoningReport & report) -> void {
@@ -253,30 +268,6 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
     dead_reckoning_msg_.pose.covariance[35] = -1;
 
     dead_reckoning_pub_->publish(dead_reckoning_msg_);  // NOLINT(portability-template-virtual-member-function)
-  });
-
-  client_->register_callback([this](const DeadReckoningReport & report) -> void {
-    const auto t = std::chrono::time_point_cast<std::chrono::nanoseconds>(report.ts);
-    odom_msg_.header.stamp = rclcpp::Time(t.time_since_epoch().count());
-
-    odom_msg_.pose.pose.position.x = report.x;
-    odom_msg_.pose.pose.position.y = report.y;
-    odom_msg_.pose.pose.position.z = report.z;
-
-    tf2::Quaternion q;
-    q.setRPY(report.roll * M_PI / 180., report.pitch * M_PI / 180., report.yaw * M_PI / 180.);
-    odom_msg_.pose.pose.orientation = tf2::toMsg(q);
-
-    odom_msg_.pose.covariance[0] = report.std;
-    odom_msg_.pose.covariance[7] = report.std;
-    odom_msg_.pose.covariance[14] = report.std;
-
-    // same as above: orientation covariance isn't provided by the DVL so set to -1
-    odom_msg_.pose.covariance[21] = -1;
-    odom_msg_.pose.covariance[28] = -1;
-    odom_msg_.pose.covariance[35] = -1;
-
-    odom_pub_->publish(odom_msg_);  // NOLINT(portability-template-virtual-member-function)
   });
 
   enable_acoustic_srv_ = create_service<std_srvs::srv::SetBool>(

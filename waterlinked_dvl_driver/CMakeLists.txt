@@ -13,6 +13,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(marine_acoustic_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(libwaterlinked REQUIRED)
@@ -47,6 +48,7 @@ target_link_libraries(
         ${std_srvs_TARGETS}
         ${marine_acoustic_msgs_TARGETS}
         ${nav_msgs_TARGETS}
+        ${sensor_msgs_TARGETS}
         ${tf2_geometry_msgs_TARGETS}
 )
 

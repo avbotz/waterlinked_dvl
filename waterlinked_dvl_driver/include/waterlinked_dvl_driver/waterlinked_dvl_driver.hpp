@@ -23,9 +23,10 @@
 #include <memory>
 
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/twist_with_covariance_stamped.hpp"
 #include "libwaterlinked/client.hpp"
 #include "marine_acoustic_msgs/msg/dvl.hpp"
-#include "nav_msgs/msg/odometry.hpp"
+#include "sensor_msgs/msg/range.hpp"
 #include "rclcpp_components/register_node_macro.hpp"
 #include "rclcpp_lifecycle/lifecycle_node.hpp"
 #include "std_srvs/srv/set_bool.hpp"
@@ -57,12 +58,14 @@ private:
   // Declare the DVL and dead reckoning messages to avoid re-initializing them every time they are published
   marine_acoustic_msgs::msg::Dvl dvl_msg_;
   geometry_msgs::msg::PoseWithCovarianceStamped dead_reckoning_msg_;
-  nav_msgs::msg::Odometry odom_msg_;
+  geometry_msgs::msg::TwistWithCovarianceStamped velocity_msg_;
+  sensor_msgs::msg::Range range_;
 
   std::shared_ptr<rclcpp::Publisher<marine_acoustic_msgs::msg::Dvl>> dvl_pub_;
   std::shared_ptr<rclcpp::Publisher<marine_acoustic_msgs::msg::Dvl>> dvl_water_pub_;
   std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>> dead_reckoning_pub_;
-  std::shared_ptr<rclcpp::Publisher<nav_msgs::msg::Odometry>> odom_pub_;
+  std::shared_ptr<rclcpp::Publisher<geometry_msgs::msg::TwistWithCovarianceStamped>> velocity_pub_;
+  std::shared_ptr<rclcpp::Publisher<sensor_msgs::msg::Range>> altitude_pub_;
 
   std::shared_ptr<rclcpp::Service<std_srvs::srv::SetBool>> enable_acoustic_srv_;
   std::shared_ptr<rclcpp::Service<std_srvs::srv::SetBool>> enable_dark_mode_srv_;
