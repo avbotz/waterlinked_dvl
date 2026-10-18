@@ -1,7 +1,9 @@
 {
   "name": "ROS 2 Dev Container",
-  "dockerFile": "Dockerfile",
-  "context": "..",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
   "workspaceMount": "source=${localWorkspaceFolder},target=/home/ubuntu/ws_ros/src/waterlinked_dvl,type=bind",
   "workspaceFolder": "/home/ubuntu/ws_ros/src/waterlinked_dvl",
   "remoteUser": "ubuntu",

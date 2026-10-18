@@ -220,13 +220,13 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
 
   // much of the following code could be moved into the above callback, but we separate it to improve readability
   client_->register_callback([this](const VelocityReport & report) -> void {
-    if (!report.velocity_valid) {
+    if (report.type != "velocity_water" || !report.velocity_valid) {
       return;
     }
     const auto t = std::chrono::time_point_cast<std::chrono::nanoseconds>(report.time_of_validity);
     velocity_msg_.header.stamp = rclcpp::Time(t.time_since_epoch().count());
 
-    if (report.type != "velocity_water" && std::isfinite(report.altitude) && report.altitude > 0.0) {
+    if (std::isfinite(report.altitude) && report.altitude > 0.0) {
       range_.header.stamp = velocity_msg_.header.stamp;
       range_.radiation_type = sensor_msgs::msg::Range::ULTRASOUND;
       range_.field_of_view = static_cast<float>(2.0 * 22.5 * M_PI / 180.0);
