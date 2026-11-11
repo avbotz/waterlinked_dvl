@@ -220,7 +220,7 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
 
   // much of the following code could be moved into the above callback, but we separate it to improve readability
   client_->register_callback([this](const VelocityReport & report) -> void {
-    if (report.type != "velocity_water" || !report.velocity_valid) {
+    if (report.type == "velocity_water" || !report.velocity_valid) {
       return;
     }
     const auto t = std::chrono::time_point_cast<std::chrono::nanoseconds>(report.time_of_validity);
