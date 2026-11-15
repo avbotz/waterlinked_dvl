@@ -54,6 +54,9 @@ public:
 
   ~WaterLinkedClient();
 
+  /// Check whether the client is currently connected to the DVL.
+  auto is_connected() const -> bool;
+
   /// Set the speed of sound (1000-2000m/s).
   auto set_speed_of_sound(std::uint16_t speed_of_sound) -> std::future<CommandResponse>;
 
