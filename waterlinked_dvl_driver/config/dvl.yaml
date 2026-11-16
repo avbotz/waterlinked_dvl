@@ -12,6 +12,9 @@ waterlinked_dvl_driver_node:
     # Specify a timeout for the DVL connection
     timeout: 5 # seconds
 
+    # Period to check and retry the DVL connection if disconnected (0 to disable)
+    reconnect_period: 15 # seconds
+
     # All measurements are obtained from the DVL use the following coordinate
     # convention:
     # - x: Forward

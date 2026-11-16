@@ -69,66 +69,6 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
     return CallbackReturn::ERROR;
   }
 
-  try {
-    const auto timeout = std::chrono::seconds(params_.timeout);
-    client_ = std::make_unique<WaterLinkedClient>(params_.ip_address, params_.port, timeout, timeout);
-  }
-  catch (const std::exception & e) {
-    RCLCPP_ERROR(get_logger(), "Failed to create WaterLinkedClient. %s", e.what());
-    return CallbackReturn::ERROR;
-  }
-  // Get current configuration
-  CommandResponse get_config_response;
-  try {
-    get_config_response = client_->get_configuration().get();
-  }
-  catch (const std::exception & e) {
-    RCLCPP_ERROR(get_logger(), "Failed to get current DVL configuration: %s", e.what());
-    return CallbackReturn::ERROR;
-  }
-
-  if (!get_config_response.success) {
-    RCLCPP_ERROR(
-      get_logger(),
-      "Failed to get current DVL configuration: %s",
-      get_config_response.error_message.c_str());  // NOLINT
-    return CallbackReturn::ERROR;
-  }
-
-  Configuration config;
-  try {
-    config = get_config_response.result.get<Configuration>();
-  }
-  catch (const std::exception & e) {
-    RCLCPP_ERROR(get_logger(), "Failed to parse current DVL configuration: %s", e.what());
-    return CallbackReturn::ERROR;
-  }
-  // Use configured ROS parameters as desired startup configuration.
-  config.speed_of_sound = static_cast<std::uint16_t>(params_.speed_of_sound);
-  config.mounting_rotation_offset = static_cast<std::uint16_t>(params_.mounting_rotation_offset);
-  config.range_mode = params_.range_mode;
-  config.acoustic_enabled = params_.acoustic_enabled;
-  config.dark_mode_enabled = params_.dark_mode_enabled;
-  config.periodic_cycling_enabled = params_.periodic_cycling_enabled;
-  if (config.hardware_trigger_enabled.has_value()) {
-    config.hardware_trigger_enabled = params_.hardware_trigger_enabled;
-  } else if (params_.hardware_trigger_enabled) {
-    RCLCPP_WARN(
-      get_logger(),
-      "Ignoring parameter 'hardware_trigger_enabled=true': this DVL does not report hardware trigger support.");
-  }
-
-  std::future<CommandResponse> f = client_->set_configuration(config);
-
-  const CommandResponse response = f.get();
-  if (!response.success) {
-    RCLCPP_ERROR(get_logger(), "Failed to set DVL configuration: %s", response.error_message.c_str());  // NOLINT
-    return CallbackReturn::ERROR;
-  }
-
-  client_->set_ntp_config(params_.ntp_address);
-  client_->force_ntp_sync(std::chrono::seconds{5});
-
   // Pre-populate the sensor state messages with known, static values
   dvl_msg_.header.frame_id = params_.frame_id;
   dead_reckoning_msg_.header.frame_id = params_.frame_id;
@@ -175,6 +115,175 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
   altitude_pub_ = create_publisher<sensor_msgs::msg::Range>("~/altitude", rclcpp::SystemDefaultsQoS());
   dead_reckoning_pub_ = create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
     "~/dead_reckoning_report", rclcpp::SystemDefaultsQoS());
+
+  enable_acoustic_srv_ = create_service<std_srvs::srv::SetBool>(
+    "~/enable_acoustic",
+    [this](
+      const std::shared_ptr<std_srvs::srv::SetBool::Request> request,  // NOLINT
+      std::shared_ptr<std_srvs::srv::SetBool::Response> response) -> void {
+      std::future<CommandResponse> f = client_->enable_acoustics(request->data);
+      populate_service_response(response, f);
+    });
+
+  enable_dark_mode_srv_ = create_service<std_srvs::srv::SetBool>(
+    "~/enable_dark_mode",
+    [this](
+      const std::shared_ptr<std_srvs::srv::SetBool::Request> request,  // NOLINT
+      std::shared_ptr<std_srvs::srv::SetBool::Response> response) -> void {
+      std::future<CommandResponse> f = client_->enable_dark_mode(request->data);
+      populate_service_response(response, f);
+    });
+
+  enable_periodic_cycling_srv_ = create_service<std_srvs::srv::SetBool>(
+    "~/enable_periodic_cycling",
+    [this](
+      const std::shared_ptr<std_srvs::srv::SetBool::Request> request,  // NOLINT
+      std::shared_ptr<std_srvs::srv::SetBool::Response> response) -> void {
+      std::future<CommandResponse> f = client_->enable_periodic_cycling(request->data);
+      populate_service_response(response, f);
+    });
+
+  calibrate_gyro_srv_ = create_service<std_srvs::srv::Trigger>(
+    "~/calibrate_gyro",
+    [this](
+      const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
+      std::future<CommandResponse> f = client_->calibrate_gyro();
+      populate_service_response(response, f);
+    });
+
+  reset_dead_reckoning_srv_ = create_service<std_srvs::srv::Trigger>(
+    "~/reset_dead_reckoning",
+    [this](
+      const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
+      std::future<CommandResponse> f = client_->reset_dead_reckoning();
+      populate_service_response(response, f);
+    });
+
+  trigger_ping_srv_ = create_service<std_srvs::srv::Trigger>(
+    "~/trigger_ping",
+    [this](
+      const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
+      std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
+      std::future<CommandResponse> f = client_->trigger_ping();
+      populate_service_response(response, f);
+    });
+
+    force_ntp_sync_srv_ = create_service<std_srvs::srv::Trigger>(
+      "~/force_ntp_sync",
+      [this](
+        const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
+        std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
+        std::future<CommandResponse> f = client_->force_ntp_sync(std::chrono::seconds{5});
+        populate_service_response(response, f);
+      });
+
+  if (!connect_dvl() && params_.reconnect_period <= 0) {
+    return CallbackReturn::ERROR;
+  }
+
+  if (params_.reconnect_period > 0) {
+    reconnect_timer_ =
+      create_wall_timer(std::chrono::seconds(params_.reconnect_period), [this]() -> void { connect_dvl(); });
+  }
+
+  RCLCPP_INFO(get_logger(), "WaterLinkedDvlDriver loaded successfully");
+
+  return CallbackReturn::SUCCESS;
+}
+
+auto WaterLinkedDvlDriver::on_activate(const rclcpp_lifecycle::State & /*previous_state*/) -> CallbackReturn
+{
+  if (client_ == nullptr || !client_->is_connected()) {
+    return params_.reconnect_period > 0 ? CallbackReturn::SUCCESS : CallbackReturn::ERROR;
+  }
+
+  std::future<CommandResponse> f = client_->reset_dead_reckoning();
+  const CommandResponse response = f.get();
+  if (!response.success) {
+    RCLCPP_ERROR(get_logger(), "Failed to reset dead reckoning: %s", response.error_message.c_str());
+    return CallbackReturn::ERROR;
+  }
+  return CallbackReturn::SUCCESS;
+}
+
+auto WaterLinkedDvlDriver::connect_dvl() -> bool
+{
+  if (client_ != nullptr && client_->is_connected()) {
+    return true;
+  }
+
+  try {
+    const auto timeout = std::chrono::seconds(params_.timeout);
+    client_ = std::make_unique<WaterLinkedClient>(params_.ip_address, params_.port, timeout, timeout);
+  }
+  catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to create WaterLinkedClient. %s", e.what());
+    return false;
+  }
+  // Get current configuration
+  CommandResponse get_config_response;
+  try {
+    get_config_response = client_->get_configuration().get();
+  }
+  catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to get current DVL configuration: %s", e.what());
+    client_.reset();
+    return false;
+  }
+
+  if (!get_config_response.success) {
+    RCLCPP_ERROR(
+      get_logger(),
+      "Failed to get current DVL configuration: %s",
+      get_config_response.error_message.c_str());  // NOLINT
+    client_.reset();
+    return false;
+  }
+
+  Configuration config;
+  try {
+    config = get_config_response.result.get<Configuration>();
+  }
+  catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to parse current DVL configuration: %s", e.what());
+    client_.reset();
+    return false;
+  }
+  // Use configured ROS parameters as desired startup configuration.
+  config.speed_of_sound = static_cast<std::uint16_t>(params_.speed_of_sound);
+  config.mounting_rotation_offset = static_cast<std::uint16_t>(params_.mounting_rotation_offset);
+  config.range_mode = params_.range_mode;
+  config.acoustic_enabled = params_.acoustic_enabled;
+  config.dark_mode_enabled = params_.dark_mode_enabled;
+  config.periodic_cycling_enabled = params_.periodic_cycling_enabled;
+  if (config.hardware_trigger_enabled.has_value()) {
+    config.hardware_trigger_enabled = params_.hardware_trigger_enabled;
+  } else if (params_.hardware_trigger_enabled) {
+    RCLCPP_WARN(
+      get_logger(),
+      "Ignoring parameter 'hardware_trigger_enabled=true': this DVL does not report hardware trigger support.");
+  }
+
+  CommandResponse response;
+  try {
+    response = client_->set_configuration(config).get();
+  }
+  catch (const std::exception & e) {
+    RCLCPP_ERROR(get_logger(), "Failed to set DVL configuration: %s", e.what());
+    client_.reset();
+    return false;
+  }
+
+  if (!response.success) {
+    RCLCPP_ERROR(get_logger(), "Failed to set DVL configuration: %s", response.error_message.c_str());  // NOLINT
+    client_.reset();
+    return false;
+  }
+
+  client_->set_ntp_config(params_.ntp_address);
+  client_->force_ntp_sync(std::chrono::seconds{5});
 
   client_->register_callback([this](const VelocityReport & report) -> void {
     const auto t = std::chrono::time_point_cast<std::chrono::nanoseconds>(report.time_of_validity);
@@ -273,83 +382,8 @@ auto WaterLinkedDvlDriver::on_configure(const rclcpp_lifecycle::State & /*previo
     dead_reckoning_pub_->publish(dead_reckoning_msg_);  // NOLINT(portability-template-virtual-member-function)
   });
 
-  enable_acoustic_srv_ = create_service<std_srvs::srv::SetBool>(
-    "~/enable_acoustic",
-    [this](
-      const std::shared_ptr<std_srvs::srv::SetBool::Request> request,  // NOLINT
-      std::shared_ptr<std_srvs::srv::SetBool::Response> response) -> void {
-      std::future<CommandResponse> f = client_->enable_acoustics(request->data);
-      populate_service_response(response, f);
-    });
-
-  enable_dark_mode_srv_ = create_service<std_srvs::srv::SetBool>(
-    "~/enable_dark_mode",
-    [this](
-      const std::shared_ptr<std_srvs::srv::SetBool::Request> request,  // NOLINT
-      std::shared_ptr<std_srvs::srv::SetBool::Response> response) -> void {
-      std::future<CommandResponse> f = client_->enable_dark_mode(request->data);
-      populate_service_response(response, f);
-    });
-
-  enable_periodic_cycling_srv_ = create_service<std_srvs::srv::SetBool>(
-    "~/enable_periodic_cycling",
-    [this](
-      const std::shared_ptr<std_srvs::srv::SetBool::Request> request,  // NOLINT
-      std::shared_ptr<std_srvs::srv::SetBool::Response> response) -> void {
-      std::future<CommandResponse> f = client_->enable_periodic_cycling(request->data);
-      populate_service_response(response, f);
-    });
-
-  calibrate_gyro_srv_ = create_service<std_srvs::srv::Trigger>(
-    "~/calibrate_gyro",
-    [this](
-      const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
-      std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
-      std::future<CommandResponse> f = client_->calibrate_gyro();
-      populate_service_response(response, f);
-    });
-
-  reset_dead_reckoning_srv_ = create_service<std_srvs::srv::Trigger>(
-    "~/reset_dead_reckoning",
-    [this](
-      const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
-      std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
-      std::future<CommandResponse> f = client_->reset_dead_reckoning();
-      populate_service_response(response, f);
-    });
-
-  trigger_ping_srv_ = create_service<std_srvs::srv::Trigger>(
-    "~/trigger_ping",
-    [this](
-      const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
-      std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
-      std::future<CommandResponse> f = client_->trigger_ping();
-      populate_service_response(response, f);
-    });
-
-    force_ntp_sync_srv_ = create_service<std_srvs::srv::Trigger>(
-      "~/force_ntp_sync",
-      [this](
-        const std::shared_ptr<std_srvs::srv::Trigger::Request> /*request*/,  // NOLINT
-        std::shared_ptr<std_srvs::srv::Trigger::Response> response) -> void {
-        std::future<CommandResponse> f = client_->force_ntp_sync(std::chrono::seconds{5});
-        populate_service_response(response, f);
-      });
-
-  RCLCPP_INFO(get_logger(), "WaterLinkedDvlDriver loaded successfully");
-
-  return CallbackReturn::SUCCESS;
-}
-
-auto WaterLinkedDvlDriver::on_activate(const rclcpp_lifecycle::State & /*previous_state*/) -> CallbackReturn
-{
-  std::future<CommandResponse> f = client_->reset_dead_reckoning();
-  const CommandResponse response = f.get();
-  if (!response.success) {
-    RCLCPP_ERROR(get_logger(), "Failed to reset dead reckoning: %s", response.error_message.c_str());
-    return CallbackReturn::ERROR;
-  }
-  return CallbackReturn::SUCCESS;
+  RCLCPP_INFO(get_logger(), "Connected to DVL at %s:%ld", params_.ip_address.c_str(), params_.port);
+  return true;
 }
 
 }  // namespace waterlinked::ros
