@@ -50,7 +50,10 @@ public:
   auto on_activate(const rclcpp_lifecycle::State & previous_state) -> CallbackReturn override;
 
 private:
+  auto connect_dvl() -> bool;
+
   std::unique_ptr<WaterLinkedClient> client_;
+  rclcpp::TimerBase::SharedPtr reconnect_timer_;
 
   std::shared_ptr<waterlinked_dvl_driver::ParamListener> param_listener_;
   waterlinked_dvl_driver::Params params_;

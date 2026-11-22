@@ -195,8 +195,14 @@ WaterLinkedClient::~WaterLinkedClient()
   close(socket_);
 }
 
+auto WaterLinkedClient::is_connected() const -> bool { return running_.load(); }
+
 auto WaterLinkedClient::send_command(const nlohmann::json & command) -> std::future<CommandResponse>
 {
+  if (!running_.load()) {
+    throw std::runtime_error("Cannot send command: DVL is not connected");
+  }
+
   const std::string command_name = command.at("command").get<std::string>();
   std::promise<CommandResponse> response;
   auto future = response.get_future();
@@ -223,17 +229,19 @@ auto WaterLinkedClient::send_command(const nlohmann::json & command) -> std::fut
 
   std::size_t total_sent = 0;
   while (total_sent < command_str.size()) {
-    const ssize_t n_sent = send(socket_, command_str.data() + total_sent, command_str.size() - total_sent, 0);
+    const ssize_t n_sent = send(socket_, command_str.data() + total_sent, command_str.size() - total_sent, MSG_NOSIGNAL);
     if (n_sent < 0) {
       if (errno == EINTR) {
         continue;
       }
 
+      running_.store(false);
       remove_pending_request();
       throw std::runtime_error("Failed to send command to DVL");
     }
 
     if (n_sent == 0) {
+      running_.store(false);
       remove_pending_request();
       throw std::runtime_error("Failed to send full command to DVL");
     }

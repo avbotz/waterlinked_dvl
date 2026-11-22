@@ -23,6 +23,12 @@ waterlinked_dvl_driver:
     description: "The timeout for the DVL connection and command responses (s)."
     read_only: true
 
+  reconnect_period:
+    type: int
+    default_value: 15
+    description: "Retry DVL connection if disconnected. Can be set to 0 to disable."
+    read_only: true
+
   frame_id:
     type: string
     default_value: "dvl_link"
